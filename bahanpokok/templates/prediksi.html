@@ -1,0 +1,206 @@
+{% extends 'index.html' %}
+
+{% block content %}
+
+{% load static %}
+
+<div class="container-xxl flex-grow-1 container-p-y">
+  <h4 class="fw-bold py-3 mb-4"><span class="text-muted fw-light">Prediksi</span></h4>
+
+    <!-- Responsive Table -->
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Prediksi Harga</h5>
+      </div>
+      <div class="card-body">
+        <form id="filter" method="post">
+        <div class="row">
+          <div class="col-md-6">
+            <label class="form-label" for="date">Tanggal</label>
+            <div class="input-group" id="picker">
+              <input type="text" class="form-control" id="start" name="start" placeholder="Masukkan Tanggal" value="2021-12-01" required />
+              <span class="input-group-text">to</span>
+              <input type="text" class="form-control" id="end" name="end" placeholder="Masukkan Tanggal" value="2021-12-31" style="border-top-right-radius: 0.375rem; border-bottom-right-radius: 0.375rem;" required />
+            </div>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" for="komoditas_id">Komoditas</label>
+            <select class="form-control" id="komoditas_id" name="komoditas_id" required />
+                <option value="">Pilih Komoditas</option>
+                {% for kmd in komoditas %}
+                <option value="{{ kmd.id }}"
+                {% if kmd.id == 1 %}
+                  selected
+                {% endif %}
+                >{{ kmd.nama }}</option>
+                {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="cari">&nbsp;</label><br>
+            <button type="submit" id="cari" class="btn btn-info" title="Cari"><i class="bx bx-search"></i> Cari</button> <a href="" id="prediksi" class="btn btn-success" title="Prediksi"><i class="bx bx-line-chart"></i> Prediksi</a>
+          </div>
+        </div>
+        </form>
+      </div>
+    </div>
+    <div class="row mb-4 mt-3">
+        <div class="col-xl-12">
+        <div class="card">
+            <div class="card-body">
+            <div class="row">
+                <div class="col-md-12">
+                    <div id="container"></div>
+                </div>
+            </div>
+            </div>
+        </div>
+        </div>
+    </div>
+    <!--/ Responsive Table -->
+  </div>
+  <script>
+    const picker = document.getElementById('picker');
+    const datepicker = new DateRangePicker(picker, {
+      autohide: true,
+      buttonClass: 'btn',
+      format: 'y-mm-dd'
+    });
+
+    const filter = document.getElementById('filter');
+    filter.addEventListener('submit', event => {
+      event.preventDefault();
+      $('#table-content').DataTable().destroy();
+      getData();
+    });
+
+    getData();
+
+    function numberWithCommas(x) {
+      return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    }
+
+    function getData() {
+      let data = {
+          csrfmiddlewaretoken: '{{ csrf_token }}',
+          start: document.getElementById("start").value,
+          end: document.getElementById("end").value,
+          komoditas_id: document.getElementById("komoditas_id").value,
+      };
+      let params = typeof data == 'string' ? data : Object.keys(data).map(
+          function(k){ return encodeURIComponent(k) + '=' + encodeURIComponent(data[k]) }
+      ).join('&');
+      
+      document.getElementById("cari").innerHTML = '<div class="spinner-border spinner-border-sm text-light" role="status">' +
+        '<span class="visually-hidden">Loading...</span>' +
+        '</div>' +
+        'Cari';
+      document.getElementById("cari").disabled = true;
+      
+      fetch("{% url 'get_harga' %}", {
+          method: 'post',
+          body: params,
+          headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'Content-Type': 'application/x-www-form-urlencoded'
+          }
+      }).then((response) => {
+          return response.json();
+      }).then((res) => {
+        document.getElementById("cari").innerHTML = '<i class="bx bx-search"></i> Cari';
+        document.getElementById("cari").disabled = false;
+        let a = document.getElementById('prediksi');
+        a.href = '/prediksi/identifikasi/'+document.getElementById("komoditas_id").value+'/'+document.getElementById("start").value+'/'+document.getElementById("end").value
+        if (res.success == true) {
+          let data = res.data;
+          
+          result = data.reduce(function (r, a) {
+            r[a.komoditas__nama] = r[a.komoditas__nama] || [];
+            r[a.komoditas__nama].push(a.harga);
+            return r;
+          }, Object.create(null));
+
+          let valuelist = [];
+          for(var i in result){
+            let arr = {
+              name: i,
+              data: result[i]
+            };
+            valuelist.push(arr);
+          }
+          console.log(valuelist)
+
+          let datearr = [];
+          for (let i = 0; i < data.length; i++) {
+            datearr.push(data[i].date);
+          }
+          let datelist = datearr.filter((v, i, a) => a.indexOf(v) === i);
+          
+          buildChart(datelist, valuelist);
+
+          
+        } else {
+          
+        }
+      }).catch((error) => {
+        document.getElementById("cari").innerHTML = '<i class="bx bx-search"></i> Cari';
+        document.getElementById("cari").disabled = false;
+      });
+    }
+
+    function buildChart(datelist, valuelist) {
+      Highcharts.chart('container', {
+        chart: {
+          type: 'line',
+          zoomType: 'xy'
+        },
+        title: {
+          text: 'Daftar Harga Komoditas'
+        },
+        yAxis: {
+          title: {
+            text: 'Harga (Rp)'
+          }
+        },
+        xAxis: {
+          title: {
+            text: 'Tanggal'
+          },
+          type: 'datetime',
+          labels: {
+            format: '{value:%Y-%b-%e}'
+          },
+          categories: datelist.map(x=>Date.parse(x))
+        },
+        legend: {
+          layout: 'vertical',
+          align: 'right',
+          verticalAlign: 'middle'
+        },
+        plotOptions: {
+          line: {
+            dataLabels: {
+              enabled: true
+            },
+            enableMouseTracking: true
+          }
+        },
+        series: valuelist,
+        responsive: {
+          rules: [{
+            condition: {
+              maxWidth: 500
+            },
+            chartOptions: {
+              legend: {
+                layout: 'horizontal',
+                align: 'center',
+                verticalAlign: 'bottom'
+              }
+            }
+          }]
+        }
+      });
+    }
+  </script>
+{% endblock %}

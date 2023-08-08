@@ -1,0 +1,275 @@
+{% extends 'index.html' %}
+
+{% block content %}
+
+{% load static %}
+
+<div class="container-xxl flex-grow-1 container-p-y">
+  <h4 class="fw-bold py-3 mb-4"><span class="text-muted fw-light">Hasil Prediksi Harga {{ komoditas }} {{ startf }} - {{ endf }}</span></h4>
+
+    <!-- Responsive Table -->
+    
+    <div class="row">
+      <div class="col-md-12">
+        <div class="row mb-4">
+          <div class="col-md-12">
+            <div class="card">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Hasil Prediksi ARIMA({{ p }},{{ d }},{{ q }})</h5>
+              </div>
+              <div class="card-body">
+              <div class="row">
+                <div class="col-md-12">
+                  <div id="container"></div>
+                </div>
+              </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="row mb-4">
+          <div class="col-md-12">
+            <div class="card">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Nilai Akurasi</h5>
+              </div>
+              <div class="card-body">
+              <div class="row">
+                <div class="col-md-12">
+                  <p><b>RMSE (Root Mean Squared Error)</b> : <span id="rmse"></span></p>
+                  <p><b>MAPE (Mean Absolute Percentage Error)</b> : <span id="mape"></span></p>
+                </div>
+              </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="row mb-4">
+          <div class="col-md-12">
+            <div class="card">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Hasil Prediksi ARIMA({{ p }},{{ d }},{{ q }})</h5>
+              </div>
+              <div class="card-body">
+                <table id="table-content" class="table table-striped" style="width:100%">
+                  <thead>
+                    <tr class="text-nowrap">
+                      <th>No.</th>
+                      <th>Tanggal</th>
+                      <th>Harga Data Uji</th>
+                      <th>Harga Ramal Uji</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr class="text-nowrap">
+                      <td colspan="5"><center>Loading...</center></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!--/ Responsive Table -->
+  </div>
+  <script>
+    function numberWithCommas(x) {
+      let parts = x.toString().split(".");
+      parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      return parts.join(".");
+    }
+
+    getData();
+
+    function getData() {
+      let data = {
+          csrfmiddlewaretoken: '{{ csrf_token }}',
+          start: '{{ start }}',
+          end: '{{ end }}',
+          komoditas_id: '{{ id_kmd }}',
+          p: '{{ p }}',
+          d: '{{ d }}',
+          q: '{{ q }}',
+          startf: '{{ startf }}',
+          endf: '{{ endf }}',
+      };
+      let params = typeof data == 'string' ? data : Object.keys(data).map(
+          function(k){ return encodeURIComponent(k) + '=' + encodeURIComponent(data[k]) }
+      ).join('&');
+      
+      fetch("{% url 'get_hasil_prediksi' %}", {
+          method: 'post',
+          body: params,
+          headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'Content-Type': 'application/x-www-form-urlencoded'
+          }
+      }).then((response) => {
+          return response.json();
+      }).then((res) => {
+        if (res.success == true) {
+          let datefull = res.datefull;
+          let datefuture = res.datefuture;
+          let hargapast = res.hargapast;
+          let hargafuture = res.hargafuture;
+          let hargafutureaktual = res.hargafutureaktual;
+          let mape = res.mape_ramal;
+          let rmse = res.rmse_ramal;
+          if (mape != null) {
+            document.getElementById("mape").innerHTML = mape.toFixed(3)+'%';
+          } else {
+            document.getElementById("mape").innerHTML = 'Null';
+          }
+          if (rmse != null) {
+            document.getElementById("rmse").innerHTML = rmse.toFixed(3);
+          } else {
+            document.getElementById("rmse").innerHTML = 'Null';
+          }
+          let pastnull = []
+          let futurenull = []
+          let futureaktualnull = []
+          let tablefuture = []
+          for (let i = 0; i < hargapast.length; i++) {
+              pastnull.push(null);
+          }
+          for (let i = 0; i < hargafuture.length; i++) {
+              futurenull.push(null);
+              futureaktualnull.push(null);
+              let arr = {
+                'date': datefuture[i],
+                'harga_aktual': hargafutureaktual[i],
+                'harga_ramal': hargafuture[i]
+              }
+              tablefuture.push(arr);
+          }
+          let fulldatepast = hargapast.concat(futurenull);
+          let fulldatefuture = pastnull.concat(hargafuture);
+          let fulldatefutureaktual = pastnull.concat(hargafutureaktual);
+          let series = [
+            {
+              'name': 'Data Latih',
+              'data': fulldatepast
+            },
+            {
+              'name': 'Data Uji',
+              'data': fulldatefutureaktual
+            },
+            {
+              'name': 'Data Ramal Uji',
+              'data': fulldatefuture
+            }
+          ]
+          buildChart(series, datefull);
+          buildTable(tablefuture);
+        } else {
+          
+        }
+      }).catch((error) => {
+      });
+    }
+
+    function buildChart(series, datefull) {
+      Highcharts.chart('container', {
+        chart: {
+          type: 'line',
+          zoomType: 'xy'
+        },
+        title: {
+          text: 'Data Harga {{ komoditas }}'
+        },
+      
+        yAxis: {
+          title: {
+            text: 'Harga (Rp)'
+          }
+        },
+      
+        xAxis: {
+          title: {
+            text: 'Tanggal'
+          },
+          type: 'datetime',
+          labels: {
+            format: '{value:%Y-%b-%e}'
+          },
+          categories: datefull.map(x=>Date.parse(x))
+        },
+      
+        legend: {
+          layout: 'vertical',
+          align: 'right',
+          verticalAlign: 'middle'
+        },
+      
+        plotOptions: {
+          line: {
+            dataLabels: {
+              enabled: true
+            },
+            enableMouseTracking: true
+          }
+        },
+      
+        series: series,
+      
+        responsive: {
+          rules: [{
+            condition: {
+              maxWidth: 500
+            },
+            chartOptions: {
+              legend: {
+                layout: 'horizontal',
+                align: 'center',
+                verticalAlign: 'bottom'
+              }
+            }
+          }]
+        }
+      });
+    }
+
+    function buildTable(tablefuture) {
+      $('#table-content').DataTable({
+        responsive: true,
+        language: {
+          "sEmptyTable": "No data available",
+          "paginate": {
+            "previous": "<i class='menu-icon tf-icons bx bx-chevrons-left'></i>",
+            "next": "<i class='menu-icon tf-icons bx bx-chevrons-right'></i>"
+          },
+          "loadingRecords": "Loading..."
+        },
+        data: tablefuture,
+        columns: [
+          { "data": null, 
+            render: function (data, type, row, meta) {
+              return meta.row + meta.settings._iDisplayStart + 1;
+            }  
+          },
+          { data: 'date' },
+          { data: 'harga_aktual',
+            render: function (data, type, row, meta) {
+              if (data != null) {
+                return 'Rp ' + numberWithCommas(data);
+              } else {
+                return data;
+              }
+            }
+          },
+          { data: 'harga_ramal',
+            render: function (data, type, row, meta) {
+              if (data != null) {
+                return 'Rp ' + numberWithCommas(data.toFixed(2));
+              } else {
+                return data;
+              }
+            }
+          },
+        ]
+      });
+    }
+  </script>
+{% endblock %}

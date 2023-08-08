@@ -1,0 +1,214 @@
+{% extends 'index.html' %}
+
+{% block content %}
+
+{% load static %}
+
+<div class="container-xxl flex-grow-1 container-p-y">
+  <h4 class="fw-bold py-3 mb-4"><span class="text-muted fw-light">Prediksi Model ARIMA Harga {{ komoditas }}</span></h4>
+
+    <!-- Responsive Table -->
+    
+    <div class="row">
+      <div class="col-md-9" id="chartlist">
+        
+      </div>
+      <div class="col-md-3">
+        <div class="card">
+          <div class="card-body">
+            <form onsubmit="return submitForm(event)">
+            <div class="row">
+              <div class="col-md-12">
+                <div class="mb-3">
+                  <label class="form-label" for="startf">Pilih Model</label>
+                  <select class="form-control" id="model" placeholder="Start Ramal" required/>
+                    
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label" for="startf">Start Ramal</label>
+                  <input type="text" class="form-control" id="startf" placeholder="Start Ramal" required readonly/>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label" for="endf">End Ramal</label>
+                  <input type="text" class="form-control" id="endf" placeholder="End Ramal" required/>
+                </div>
+                <button type="submit" class="btn btn-success"><i class="bx bx-right-arrow-alt"></i> Lanjut</button>
+              </div>
+            </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!--/ Responsive Table -->
+  </div>
+  <script>
+    let newDate = moment('{{ end }}', "YYYY-MM-DD").add(1, 'days');
+    let day = newDate.format('DD');
+    let month = newDate.format('MM');
+    let year = newDate.format('YYYY');
+    let fixDate = year + '-' + month + '-' + day;
+    document.getElementById("startf").value = fixDate;
+
+    const picker = document.getElementById('endf');
+    const datepicker = new Datepicker(picker, {
+      autohide: true,
+      buttonClass: 'btn',
+      format: 'y-mm-dd',
+      minDate: new Date(fixDate),
+    });
+
+    function submitForm(e) {
+      e.preventDefault();
+      let model = document.getElementById("model").value;
+      let startf = document.getElementById("startf").value;
+      let endf = document.getElementById("endf").value;
+      location.href = '/prediksi/hasil/{{ id_kmd }}/{{ start }}/{{ end }}/'+model+'/'+startf+'/'+endf;
+      return false;
+    }
+
+    getData();
+
+    function getData() {
+      let data = {
+          csrfmiddlewaretoken: '{{ csrf_token }}',
+          start: '{{ start }}',
+          end: '{{ end }}',
+          komoditas_id: '{{ id_kmd }}',
+          p: '{{ p }}',
+          d: '{{ d }}',
+          q: '{{ q }}',
+      };
+      let params = typeof data == 'string' ? data : Object.keys(data).map(
+          function(k){ return encodeURIComponent(k) + '=' + encodeURIComponent(data[k]) }
+      ).join('&');
+      
+      fetch("{% url 'get_model' %}", {
+          method: 'post',
+          body: params,
+          headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'Content-Type': 'application/x-www-form-urlencoded'
+          }
+      }).then((response) => {
+          return response.json();
+      }).then((res) => {
+        if (res.success == true) {
+          let data = res;
+          console.log(data)
+          let actual = data.actual;
+          let model = data.model;
+          let pastdatelist = data.pastdatelist;
+          let allmodel = [];
+          let htmselect = '';
+          let htm = '';
+          for (let i = 0; i < model.length; i++) {
+            let modelpdq = JSON.stringify(model[i]['modelpdq']).replace('[', '').replace(']', '');
+            htmselect += '<option value="'+model[i]['modelpdq'][0]+'/'+model[i]['modelpdq'][1]+'/'+model[i]['modelpdq'][2]+'">ARIMA('+modelpdq+')</option>';
+
+            htm += '<div class="row mb-4">';
+              htm += '<div class="col-md-12">';
+                htm += '<div class="card">';
+                  htm += '<div class="card-header d-flex justify-content-between align-items-center">';
+                    htm += '<h5 class="mb-0">Plot Data ARIMA('+modelpdq+')</h5>';
+                  htm += '</div>';
+                  htm += '<div class="card-body">';
+                      htm += '<div class="row">';
+                        htm += '<div class="col-md-12">';
+                        htm += '<div id="container'+i+'"></div>';
+                        htm += '<p><b>MAPE (Mean Absolute Percentage Error)</b> : '+model[i]['mape'].toFixed(3)+'%</p>';
+                        htm += '<p><b>RMSE (Root Mean Square Error)</b> : '+model[i]['rmse'].toFixed(3)+'</p>';
+                      htm += '</div>';
+                    htm += '</div>';
+                  htm += '</div>';
+                htm += '</div>';
+              htm += '</div>';
+            htm += '</div>';
+            chartmodel = [
+              {
+                'name': actual.name,
+                'data': actual.data
+              },
+              {
+                'name': 'Data Ramal ARIMA('+modelpdq+')',
+                'data': model[i]['fitted']
+              }
+            ]
+            allmodel.push(chartmodel);
+          }
+          document.getElementById("model").innerHTML = htmselect;
+          document.getElementById("chartlist").innerHTML = htm;
+          buildChart(pastdatelist, allmodel);
+        } else {
+          
+        }
+      }).catch((error) => {
+      });
+    }
+
+    function buildChart(pastdatelist, allmodel) {
+      for (var i in allmodel) {
+        new Highcharts.Chart({
+          chart: {
+            renderTo: 'container'+i,
+            type: 'line',
+            zoomType: 'xy'
+          },
+          title: {
+            text: 'Daftar Harga Komoditas'
+          },
+        
+          yAxis: {
+            title: {
+              text: 'Harga (Rp)'
+            }
+          },
+        
+          xAxis: {
+            title: {
+              text: 'Tanggal'
+            },
+            type: 'datetime',
+            labels: {
+              format: '{value:%Y-%b-%e}'
+            },
+            categories: pastdatelist.map(x=>Date.parse(x))
+          },
+        
+          legend: {
+            layout: 'vertical',
+            align: 'right',
+            verticalAlign: 'middle'
+          },
+        
+          plotOptions: {
+            line: {
+              dataLabels: {
+                enabled: true
+              },
+              enableMouseTracking: true
+            }
+          },
+        
+          series: allmodel[i],
+        
+          responsive: {
+            rules: [{
+              condition: {
+                maxWidth: 500
+              },
+              chartOptions: {
+                legend: {
+                  layout: 'horizontal',
+                  align: 'center',
+                  verticalAlign: 'bottom'
+                }
+              }
+            }]
+          }
+        });
+      }
+    }
+  </script>
+{% endblock %}

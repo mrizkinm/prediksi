@@ -1,0 +1,366 @@
+{% extends 'index.html' %}
+
+{% block content %}
+
+{% load static %}
+
+<div class="container-xxl flex-grow-1 container-p-y">
+  <h4 class="fw-bold py-3 mb-4"><span class="text-muted fw-light">Prediksi Harga {{ komoditas }}</span></h4>
+
+    <!-- Responsive Table -->
+    
+    <div class="row">
+      <div class="col-md-9">
+        <div class="row mb-4">
+          <div class="col-md-12">
+            <div class="card">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Plot Data Asli</h5>
+              </div>
+              <div class="card-body">
+              <div class="row">
+                <div class="col-md-12">
+                  <div id="container"></div>
+                </div>
+              </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="row mb-4">
+          <div class="col-md-12">
+            <div class="card">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Plot Differencing <span id="diffvalue"></span></h5>
+              </div>
+              <div class="card-body">
+              <div class="row">
+                <div class="col-md-12">
+                  <div id="diffcontainer"></div>
+                </div>
+              </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="row mb-4 mt-3">
+          <div class="col-md-6">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Plot ACF</h5>
+                </div>
+                <div class="card-body">
+                <div class="row">
+                    <div class="col-md-12">
+                        <img src="" id="acf" class="img-fluid">
+                    </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Plot PACF</h5>
+                </div>
+                <div class="card-body">
+                <div class="row">
+                    <div class="col-md-12">
+                      <img src="" id="pacf" class="img-fluid">
+                    </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card">
+          <div class="card-body">
+            <form onsubmit="return submitForm(event)">
+            <div class="row">
+              <div class="col-md-12">
+                <div class="mb-3">
+                  <label class="form-label" for="ar">Ordo AR (p)</label>
+                  <input type="number" min="0" class="form-control" id="ar" value="0" placeholder="Ordo AR" required />
+                </div>
+                {% comment %} <div class="mb-3">
+                  <label class="form-label" for="diff">Differencing (d)</label>
+                  <input type="number" min="0" class="form-control" id="diff" onkeyup="diffData()" value="0" placeholder="Differencing" required/>
+                </div> {% endcomment %}
+                <div class="mb-3">
+                  <label class="form-label" for="diff">DIfferencing (d)</label>
+                  <select class="form-control" id="diff" name="diff" onchange="diffData()">
+                    <option value="0">0</option>
+                    <option value="1">1</option>
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label" for="ma">Ordo MA(q)</label>
+                  <input type="number" min="0" class="form-control" id="ma" value="0" placeholder="Ordo MA" required/>
+                </div>
+                <button type="submit" class="btn btn-success"><i class="bx bx-right-arrow-alt"></i> Lanjut</button>
+              </div>
+            </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!--/ Responsive Table -->
+  </div>
+  <script>
+    let alldata;
+    let diffedata;
+    let chart1;
+    let chart2;
+
+    function submitForm(e) {
+      e.preventDefault();
+      let ar = document.getElementById("ar").value;
+      let diff = document.getElementById("diff").value;
+      let ma = document.getElementById("ma").value;
+      if (ar > 0 || ma > 0) {
+        location.href = '/prediksi/model/{{ id_kmd }}/{{ start }}/{{ end }}/'+ar+'/'+diff+'/'+ma;
+      } else {
+        alert('AR atau MA tidak boleh kosong')
+      }
+      return false;
+    }
+
+    getData();
+
+    function getData() {
+      let data = {
+          csrfmiddlewaretoken: '{{ csrf_token }}',
+          start: '{{ start }}',
+          end: '{{ end }}',
+          komoditas_id: '{{ id_kmd }}',
+      };
+      let params = typeof data == 'string' ? data : Object.keys(data).map(
+          function(k){ return encodeURIComponent(k) + '=' + encodeURIComponent(data[k]) }
+      ).join('&');
+      
+      fetch("{% url 'get_harga' %}", {
+          method: 'post',
+          body: params,
+          headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'Content-Type': 'application/x-www-form-urlencoded'
+          }
+      }).then((response) => {
+          return response.json();
+      }).then((res) => {
+        if (res.success == true) {
+          let data = res.data;
+          alldata = data;
+          getPlot();
+          result = data.reduce(function (r, a) {
+            r[a.komoditas__nama] = r[a.komoditas__nama] || [];
+            r[a.komoditas__nama].push(a.harga);
+            return r;
+          }, Object.create(null));
+
+          let valuelist = [];
+          for(var i in result){
+            let arr = {
+              name: i,
+              data: result[i]
+            };
+            valuelist.push(arr);
+          }
+
+          let datearr = [];
+          for (let i = 0; i < data.length; i++) {
+            datearr.push(data[i].date);
+          }
+          let datelist = datearr.filter((v, i, a) => a.indexOf(v) === i);
+
+          buildChart(datelist, valuelist);
+          plotDiff();
+        } else {
+          
+        }
+      }).catch((error) => {
+      });
+    }
+
+    function buildChart(datelist, valuelist) {
+      chart1 = Highcharts.chart('container', {
+        chart: {
+          type: 'line',
+          zoomType: 'xy'
+        },
+        title: {
+          text: 'Data Harga {{ komoditas }}'
+        },
+      
+        yAxis: {
+          title: {
+            text: 'Harga (Rp)'
+          }
+        },
+      
+        xAxis: {
+          title: {
+            text: 'Tanggal'
+          },
+          type: 'datetime',
+          labels: {
+            format: '{value:%Y-%b-%e}'
+          },
+          categories: datelist.map(x=>Date.parse(x))
+        },
+      
+        legend: {
+          layout: 'vertical',
+          align: 'right',
+          verticalAlign: 'middle'
+        },
+      
+        plotOptions: {
+          line: {
+            dataLabels: {
+              enabled: true
+            },
+            enableMouseTracking: true
+          }
+        },
+      
+        series: valuelist,
+      
+        responsive: {
+          rules: [{
+            condition: {
+              maxWidth: 500
+            },
+            chartOptions: {
+              legend: {
+                layout: 'horizontal',
+                align: 'center',
+                verticalAlign: 'bottom'
+              }
+            }
+          }]
+        }
+      });
+    }
+
+    function plotDiff() {
+      chart2 = Highcharts.chart('diffcontainer', {
+        chart: {
+          type: 'line',
+          zoomType: 'xy'
+        },
+        title: {
+          text: 'Differencing Data'
+        },
+        yAxis: {
+          title: {
+            text: 'Data'
+          }
+        },
+        xAxis: {
+          title: {
+            text: 'index'
+          },
+          categories: [0]
+        },
+        legend: {
+          layout: 'vertical',
+          align: 'right',
+          verticalAlign: 'middle'
+        },
+        plotOptions: {
+          line: {
+            dataLabels: {
+              enabled: true
+            },
+            enableMouseTracking: true
+          }
+        },
+        series: [0],
+        responsive: {
+          rules: [{
+            condition: {
+              maxWidth: 500
+            },
+            chartOptions: {
+              legend: {
+                layout: 'horizontal',
+                align: 'center',
+                verticalAlign: 'bottom'
+              }
+            }
+          }]
+        }
+      });
+    }
+
+    function differencing(data, interval, number) {
+      let newNumber = number - 1;
+      let diff = document.getElementById("diff").value;
+      let dataAll = data;
+      let dataDiff = [];
+      let dataDiff0 = [];
+      for (let i = interval; i < dataAll.length; i++) {
+        let harga = dataAll[i]['harga'] - dataAll[i-interval]['harga'];
+        let arrDiff = {
+          'date': i,
+          'harga': harga
+        }
+        dataDiff.push(arrDiff);
+        dataDiff0.push(harga);
+      }
+      chart2.series[0].setData(dataDiff0);
+      diffedata = dataDiff;
+      getPlot();
+      if (newNumber > 0) {
+        differencing(dataDiff, interval, newNumber);
+      }
+    }
+
+    function diffData() {
+      let diff = document.getElementById("diff").value;
+      document.getElementById("diffvalue").innerHTML = diff;
+      if (diff > 0) {
+        differencing(alldata, 1, diff);
+      } else {
+        chart2.series[0].setData();
+        getPlot();
+      }
+    }
+
+    function getPlot() {
+      let diff = document.getElementById("diff").value;
+      let plotdata;
+      if (diff > 0) {
+        plotdata = diffedata;
+      } else {
+        plotdata = alldata;
+      }
+      let data = {
+          csrfmiddlewaretoken: '{{ csrf_token }}',
+          timeseries: JSON.stringify(plotdata)
+      };
+      let params = typeof data == 'string' ? data : Object.keys(data).map(
+          function(k){ return encodeURIComponent(k) + '=' + encodeURIComponent(data[k]) }
+      ).join('&');
+      
+      fetch("{% url 'get_acf_pacf' %}", {
+          method: 'post',
+          body: params,
+          headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'Content-Type': 'application/x-www-form-urlencoded'
+          }
+      }).then((response) => {
+        return response.json();
+      }).then((res) => {
+        document.getElementById("acf").src = 'data:image/png;base64,'+res.acf;
+        document.getElementById("pacf").src = 'data:image/png;base64,'+res.pacf;
+      }).catch((error) => {
+      });
+    }
+  </script>
+{% endblock %}

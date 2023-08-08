@@ -1,0 +1,95 @@
+{% extends 'index.html' %}
+
+{% block content %}
+
+{% load static %}
+
+<div class="container-xxl flex-grow-1 container-p-y">
+  <h4 class="fw-bold py-3 mb-4"><span class="text-muted fw-light">Komoditas/</span> Data</h4>
+
+    <!-- Responsive Table -->
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Data Komoditas</h5>
+        <small class="text-muted float-end"><a href="{% url 'add_komoditas' %}" class="btn btn-primary"><i class="bx bx-plus"></i> Tambah</a></small>
+      </div>
+      <div class="card-body">
+        {% for message in messages %}
+          {% if message %}
+            <div class="alert alert-success alert-dismissible" role="alert">
+              {{ message }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+          {% endif %}
+        {% endfor %}
+        <div class="table-responsive text-nowrap">
+          <table id="table-content" class="table table-striped" style="width:100%">
+            <thead>
+              <tr class="text-nowrap">
+                <th>No.</th>
+                <th>Nama</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <!--/ Responsive Table -->
+  </div>
+  <script>
+    $(document).ready(function() {
+      $('#table-content').DataTable({
+        responsive: true,
+        language: {
+          "sEmptyTable": "No data available",
+          "paginate": {
+            "previous": "<i class='menu-icon tf-icons bx bx-chevrons-left'></i>",
+            "next": "<i class='menu-icon tf-icons bx bx-chevrons-right'></i>"
+          },
+          "loadingRecords": "Loading..."
+        },
+        ajax : {
+          url:"{% url 'get_komoditas' %}",
+          type:"GET",
+          beforeSend: function() {
+          },
+          complete: function(response) {
+          }
+        },
+        columns: [
+          { "data": null, 
+            render: function (data, type, row, meta) {
+              return meta.row + meta.settings._iDisplayStart + 1;
+            }  
+          },
+          { data: 'nama' },
+          { data: 'id',
+            render: function (data, type, row, meta) {
+              return '<a href="/komoditas/ubah/'+data+'" class="btn btn-warning btn-xs" title="Ubah">Ubah</a> <button type="button" class="btn btn-danger btn-xs" onclick="deleteData(\''+data+'\')" title="Hapus">Hapus</button>';
+            }
+          }
+        ]
+      });
+    });
+
+    function deleteData(id) {
+      Swal.fire({
+        title: 'Hapus data komoditas',
+        text: "Yakin untuk menghapus data komoditas?",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Hapus',
+        cancelButtonText: 'Batal'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          location.href = '/komoditas/hapus/'+id;
+        }
+      })
+    }
+  </script>
+{% endblock %}

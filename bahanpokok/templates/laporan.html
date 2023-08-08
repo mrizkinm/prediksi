@@ -1,0 +1,107 @@
+{% extends 'index.html' %}
+
+{% block content %}
+
+{% load static %}
+
+<div class="container-xxl flex-grow-1 container-p-y">
+  <h4 class="fw-bold py-3 mb-4"><span class="text-muted fw-light">Laporan/</span> Data</h4>
+
+    <!-- Responsive Table -->
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Hasil Laporan</h5>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive text-nowrap">
+          <table id="table-content" class="table table-striped" style="width:100%">
+            <thead>
+              <tr class="text-nowrap">
+                <th>No.</th>
+                <th>Tanggal Buat</th>
+                <th>Komoditas</th>
+                <th>Start Train</th>
+                <th>End Train</th>
+                <th>Model</th>
+                <th>Start Ramal</th>
+                <th>End Ramal</th>
+                <th>MAPE</th>
+                <th>RMSE</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <!--/ Responsive Table -->
+  </div>
+  <script>
+    $(document).ready(function() {
+      $('#table-content').DataTable({
+        responsive: true,
+        language: {
+          "sEmptyTable": "No data available",
+          "paginate": {
+            "previous": "<i class='menu-icon tf-icons bx bx-chevrons-left'></i>",
+            "next": "<i class='menu-icon tf-icons bx bx-chevrons-right'></i>"
+          },
+          "loadingRecords": "Loading..."
+        },
+        ajax : {
+          url:"{% url 'get_laporan' %}",
+          type:"GET",
+          beforeSend: function() {
+          },
+          complete: function(response) {
+          }
+        },
+        columns: [
+          { "data": null, 
+            render: function (data, type, row, meta) {
+              return meta.row + meta.settings._iDisplayStart + 1;
+            }  
+          },
+          { data: 'date',
+            render: function (data, type, row, meta) {
+              const today = new Date(data);
+              let formattedToday = moment(today).format('YYYY-MM-DD HH:mm:ss');
+              return formattedToday;
+            }
+          },
+          { data: 'komoditas__nama' },
+          { data: 'start_train' },
+          { data: 'end_train' },
+          { data: 'model' },
+          { data: 'start_ramal' },
+          { data: 'end_ramal' },
+          { data: 'mape_ramal',
+            render: function (data, type, row, meta) {
+              if (data != null) {
+                return data.toFixed(3)+'%';
+              } else {
+                return data;
+              }
+            }
+          },
+          { data: 'rmse_ramal',
+            render: function (data, type, row, meta) {
+              if (data != null) {
+                return data.toFixed(3);
+              } else {
+                return data;
+              }
+            }
+          },
+          { data: 'id',
+            render: function (data, type, row, meta) {
+                return '<a href="/laporan/detail/'+data+'" class="btn btn-info btn-xs" title="Detail">Detail</a>';
+            }
+          }
+        ]
+      });
+    });
+  </script>
+{% endblock %}
